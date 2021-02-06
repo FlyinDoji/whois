@@ -8,7 +8,7 @@ go whois client for domain names with support for proxied queries
 
 # Installation
 ```
-go get -u github.com/flyindoji/whois
+go get -u github.com/FlyinDoji/whois
 ```
 
 # Usage
