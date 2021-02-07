@@ -15,7 +15,7 @@ go get -u github.com/FlyinDoji/whois
 
 ```go
 import (
-  "github.com/flyindoji/whois"
+  "github.com/FlyingDoji/whois"
 )
 
 s, r, e := whois.Whois("verisign.com")
