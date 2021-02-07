@@ -1,6 +1,7 @@
 package whois
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,17 +12,20 @@ import (
 	"golang.org/x/net/proxy"
 )
 
-// Query parameters
+// TCPTimeout is the time waited for contacting the Whois server
+// ResponseTimeout is the time waited for the query to be served by the Whois server
 const (
-	PORT    = ":43"
-	TIMEOUT = time.Duration(30) * time.Second
+	Port            = ":43"
+	ResponseTimeout = time.Duration(30) * time.Second
+	TCPTimeout      = time.Duration(12) * time.Second
 )
 
 type tldServ struct {
 	tld    string
 	server string
 }
-type whoisDial func(network string, address string) (net.Conn, error)
+
+type whoisDial func(ctx context.Context, network string, address string) (net.Conn, error)
 
 var tldServers []tldServ
 
@@ -45,11 +49,14 @@ func extractTLD(domain string) (tldServ, bool) {
 
 func queryServer(domain, server string, dial whoisDial) (string, string, error) {
 
-	conn, err := dial("tcp", server+PORT)
+	ctx, cancel := context.WithTimeout(context.Background(), TCPTimeout)
+	defer cancel()
+	conn, err := dial(ctx, "tcp", server+Port)
 	if err != nil {
 		return "", "", err
 	}
-	_ = conn.SetDeadline(time.Now().Add(TIMEOUT))
+
+	_ = conn.SetDeadline(time.Now().Add(ResponseTimeout))
 
 	defer conn.Close()
 	fmt.Fprintf(conn, "%s\r\n", domain)
@@ -72,7 +79,8 @@ func whois(domain string, dial whoisDial) (string, string, error) {
 // Whois queries the database of the domain's tld
 // Use the default net.Dial function to contact the whois server
 func Whois(domain string) (string, string, error) {
-	return whois(domain, net.Dial)
+	d := &net.Dialer{}
+	return whois(domain, d.DialContext)
 }
 
 // Proxied queries the database of the domain's tld via SOCKS5 proxy
@@ -80,11 +88,16 @@ func Whois(domain string) (string, string, error) {
 // p can be nil if no authentication is required
 func Proxied(domain, proxyAddr string, p *proxy.Auth) (string, string, error) {
 
-	socks, err := proxy.SOCKS5("tcp", proxyAddr, p, proxy.Direct)
+	dialer, err := proxy.SOCKS5("tcp", proxyAddr, p, proxy.Direct)
+
+	dc := dialer.(interface {
+		DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+	})
+
 	if err != nil {
 		return "", "", err
 	}
-	return whois(domain, socks.Dial)
+	return whois(domain, dc.DialContext)
 }
 
 // OwnDialer supply your own dial function
